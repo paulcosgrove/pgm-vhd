@@ -1,6 +1,9 @@
+-- 
+-- VHDL-PGM - A VHDL library for reading and writing PGM (P5) files.
 --
+-- For an example of how to use the library, see pgm_tb.vhd
 --
---
+-- Copyright 2014, Paul Cosgrove
 --
 package pgm is
 
@@ -18,16 +21,27 @@ use std.textio.all;
 
 package body pgm is
 
+    constant BYTE_MAX  : integer := 256;
+    constant SHORT_MAX : integer := 65535;
+
     type pgm_file is file of character;
 
-    subtype byte  is integer range 0 to 255;
-    subtype short is integer range 0 to 65535;
+    subtype byte is integer range 0 to BYTE_MAX;
+    subtype short is integer range 0 to SHORT_MAX;
 
+    procedure create_image(width, height : in integer; image: inout image_ptr) is
+    begin
+        if image /= null then
+            deallocate(image);
+        end if;
+        image := new pgm.image(0 to width-1, 0 to height-1);
+    end procedure;
+    
     function max(a, b : integer) return integer is
     begin
-        if a > b then
+        if a > b then 
             return a;
-        else
+        else 
             return b;
         end if;
     end max;
@@ -39,56 +53,6 @@ package body pgm is
         writeline(output, l);
     end procedure;
     
-    procedure read_byte(l : inout line; b : out byte) is
-        variable c : character;
-    begin
-        read(l, c);
-        b := character'pos(c);
-    end procedure;
-
-    procedure read_short(l : inout line; s : out short) is
-        variable b1, b2 : byte;
-    begin
-        read_byte(l, b1);
-        read_byte(l, b2);
-        s := b1 * 256 + b2;
-    end procedure;
-
-    procedure get_file_size(file_name : in string; file_size : inout integer) is
-        file f : pgm_file;
-        variable c : character;
-    begin
-        file_open(f, file_name, read_mode);
-        file_size := 0;
-        while not endfile(f) loop
-            read(f, c);
-            file_size := file_size + 1;
-        end loop;
-        file_close(f);
-    end procedure;
-
-    procedure read_file(filename : in string; l : inout line) is
-        file f : pgm_file;
-        variable file_size : integer;
-        variable c : character;
-    begin
-
-        if l /= null then
-            deallocate(l);
-        end if;
-
-        get_file_size(filename, file_size);
-        l := new string(1 to file_size);
-
-        file_open(f, filename, read_mode);
-        for i in 1 to file_size loop
-            read(f, c);
-            l(i) := c;
-        end loop;
-        file_close(f);
-        
-    end procedure;
-    
     procedure skip_whitespace(l : inout line) is
         variable c : character;
     begin
@@ -98,137 +62,109 @@ package body pgm is
         end loop;
     end procedure;
 
-    procedure create_image(width, height : in integer; image: inout image_ptr) is
-    begin
-        if image /= null then
-            deallocate(image);
-        end if;
-        image := new pgm.image(0 to width-1, 0 to height-1);
-    end procedure;
-
     procedure load_image(filename : in string; image : inout image_ptr) is
-        variable l : line;
-        variable c : character;
-        variable pgm_type : string(1 to 2);
-        variable i : integer;
-        variable width, height, depth : integer;
-    begin
-        read_file(filename, l);
-
-        -- 
-        -- Read the PGM file type 'P5'
-        --
-        read(l, pgm_type);
-
-        assert pgm_type = "P5" 
-            report ("Unknown PGM header file type '" & pgm_type & "'")
-            severity failure;
-
-        -- 
-        -- Read the width of the image in pixels
-        --
-        skip_whitespace(l);
-        read(l, width);
-
-        --
-        -- Read the height of the image in pixels
-        --
-        skip_whitespace(l);
-        read(l, height);
-       
-        --
-        -- Read the number of values used to represent each pixel
-        --
-        skip_whitespace(l);
-        read(l, depth);
-
-        --
-        -- Read a single whitespace char
-        --
-        read(l, c);
-
-        --
-        -- Create a new image and copy the pixel values from the file in to it
-        --
-        create_image(width, height, image);
-
-        if depth < 256 then
-            for y in 0 to height-1 loop
-                for x in 0 to width-1 loop
-                    read_byte(l, image(x, y));
-                end loop;
-            end loop;
-        else
-            for y in 0 to height-1 loop
-                for x in 0 to width-1 loop
-                    read_short(l, image(x, y));
-                end loop;
-            end loop;
-        end if;
-
-    end procedure;
-    
-    procedure save_image(filename : in string; image : inout image_ptr) is
         file f : pgm_file;
         variable l : line;
-        variable c : character; 
-        variable i : integer;
-
-        procedure writeline(file f : pgm_file; l : inout line) is
-        begin
-            if l /= null then
-                for x in l'left to l'right loop
-                    write(f, l(x));
-                end loop;
-                write(f, lf);
-                deallocate(l);
-            else
-                write(f, lf);
-            end if;
-        end procedure;
+        variable c, c2 : character;
+        variable pgm_type : string(1 to 2);
         variable width, height, maxval : integer;
     begin
 
-        width  := image'high(1) - image'low(1) + 1;
-        height := image'high(2) - image'low(2) + 1;
+        -- Read entire file into memory
+        file_open(f, filename, read_mode);
+        while not endfile(f) loop
+            read(f, c);
+            write(l, c);
+        end loop;
+        file_close(f);
 
+        read(l, pgm_type);
+        assert pgm_type = "P5" 
+            report ("Unknown PGM header file type '" & pgm_type & "'") 
+            severity failure;
+
+        skip_whitespace(l);
+        read(l, width);
+
+        skip_whitespace(l);
+        read(l, height);
+
+        skip_whitespace(l);
+        read(l, maxval);
+
+        read(l, c);
+
+        create_image(width, height, image);
+
+        -- Read the image pixels
+        if maxval > BYTE_MAX then
+            -- Read 16-bit pixels
+            for y in image'range(2) loop
+                for x in image'range(1) loop
+                    read(l, c);
+                    read(l, c2);
+                    image(x, y) := character'pos(c) * 256 + character'pos(c2);
+                end loop;
+            end loop;
+        else
+            -- Read 8-bit pixels
+            for y in image'range(2) loop
+                for x in image'range(1) loop
+                    read(l, c);
+                    image(x, y) := character'pos(c);
+                end loop;
+            end loop;
+        end if;
+
+    end load_image;
+
+    procedure save_image(filename : in string; image : inout image_ptr) is
+        file     f : pgm_file;
+        variable l : line;
+        variable maxval : integer;
+    begin
+
+        file_open(f, filename, write_mode);
+        
+        -- Find the maximum pixel value 
         for y in image'range(2) loop
             for x in image'range(1) loop
                 maxval := max(maxval, image(x, y));
             end loop;
         end loop;
-
-        file_open(f, filename, write_mode);
-
-        -- 
+       
         -- Write PGM file header
-        --
         write(l, string'("P5") & lf);
-        write(l, integer'image(width) & lf);
-        write(l, integer'image(height) & lf);
-        write(l, integer'image(maxval));
-        writeline(f, l);
+        write(l, integer'image(image'length(1)) & " ");
+        write(l, integer'image(image'length(2)) & lf);
+        write(l, integer'image(maxval) & lf);
 
-        if maxval < 256 then
-            for y in 0 to image'right(2) loop
-                for x in 0 to image'right(1) loop
-                    i := image(x, y);
-                    write(f, character'val(i));
+        -- Write the pixels
+        if maxval > BYTE_MAX then
+            -- Write 16-bit pixels
+            for y in image'range(2) loop
+                for x in image'range(1) loop
+                    write(l, character'val(image(x, y) mod 256));
+                    write(l, character'val(image(x, y) / 256));
                 end loop;
             end loop;
         else
-            for y in 0 to image'right(2) loop
-                for x in 0 to image'right(1) loop
-                    i := image(x, y);
-                    write(f, character'val(i mod 256));
-                    write(f, character'val(i / 256));
+            -- Write 8-bit pixels
+            for y in image'range(2) loop
+                for x in image'range(1) loop
+                    write(l, character'val(image(x, y)));
                 end loop;
             end loop;
         end if;
+        
+        for x in l'range(1) loop
+            write(f, l(x));
+        end loop;
+        deallocate(l);
 
         file_close(f);
 
-    end procedure;
+    end save_image;
 
 end;
 
