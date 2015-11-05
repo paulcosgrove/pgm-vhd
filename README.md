@@ -1,6 +1,6 @@
 PGM-VHD
 =======
 
-PgmVhd is a VHDL library for reading and writing P5 PGM files.
+PGM-VHD is a VHDL library for reading and writing PGM(P5) files.
 
 
