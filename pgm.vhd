@@ -56,8 +56,7 @@ package body pgm is
     procedure skip_whitespace(l : inout line) is
         variable c : character;
     begin
-        for h in l'low to l'high loop
-            exit when l(h) /= ' ' and l(h) /= lf;
+        while l(l'low) = ' ' or l(l'low) = lf loop
             read(l, c);
         end loop;
     end procedure;
@@ -74,6 +73,11 @@ package body pgm is
         file_open(f, filename, read_mode);
         while not endfile(f) loop
             read(f, c);
+            -- Swap spaces with linefeeds as write() ignores them in
+            -- Modelsim
+            if c = ' ' then
+                c := LF;
+            end if;
             write(l, c);
         end loop;
         file_close(f);
@@ -144,8 +148,8 @@ package body pgm is
             -- Write 16-bit pixels
             for y in image'range(2) loop
                 for x in image'range(1) loop
-                    write(l, character'val(image(x, y) mod 256));
                     write(l, character'val(image(x, y) / 256));
+                    write(l, character'val(image(x, y) mod 256));
                 end loop;
             end loop;
         else
